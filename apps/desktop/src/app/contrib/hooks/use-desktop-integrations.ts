@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react'
 import { closeActiveTab } from '@/app/chat/close-tab'
 import { openSession } from '@/app/open-session'
 import { storedSessionIdForNotification } from '@/lib/session-ids'
+import { startMcpHealthChecker, stopMcpHealthChecker } from '@/store/mcp-health'
 import { respondToApprovalAction } from '@/store/native-notifications'
 import { openFolderAsProject } from '@/store/projects'
 import {
@@ -59,11 +60,15 @@ export function useDesktopIntegrations({
   // process's "open updates" menu request.
   useEffect(() => {
     startUpdatePoller()
+    // Background MCP health: HTTP/SSE servers only (never spawns stdio),
+    // notifies on transitions into needs-auth/error with a Sign in action.
+    startMcpHealthChecker()
     const unsubscribe = window.hermesDesktop?.onOpenUpdatesRequested?.(() => openUpdatesWindow())
 
     return () => {
       unsubscribe?.()
       stopUpdatePoller()
+      stopMcpHealthChecker()
     }
   }, [])
 
