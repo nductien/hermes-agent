@@ -468,6 +468,14 @@ def _patch_skill(name: str, old_string: str, new_string: str, file_path: str = N
     skill_dir, guard = _locate_for_write(name, "patch")
     if guard:
         return guard
+    # ``file_path`` arrives from the model, from a batch op, or from a staged approval payload.
+    # Only an omitted (None) one means "patch SKILL.md": an explicitly supplied empty string is
+    # a caller mistake, and the ``if file_path:`` branch below would swallow it and commit the
+    # supporting-file patch to SKILL.md instead. _validate_file_path already rejects a blank
+    # value, so route it there rather than duplicating the rule.
+    if file_path is not None and not file_path.strip():
+        return _err("file_path is required for 'patch'. Example: 'references/api-guide.md'. "
+                    "Omit file_path entirely to patch SKILL.md.")
     target_label = file_path or "SKILL.md"
     if file_path:
         target, err = _resolve_supporting_file(skill_dir, file_path)

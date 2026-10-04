@@ -345,6 +345,107 @@ word word
         assert result["success"] is False
         assert "match" in result["error"].lower()
 
+    def test_patch_default_target_is_skill_md_when_file_path_omitted(self, tmp_path):
+        """No file_path keeps the documented default target: SKILL.md."""
+        content = """\
+---
+name: test-skill
+description: A test skill.
+---
+
+# Test
+
+word word
+"""
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", content)
+            result = _patch_skill("my-skill", "word word", "patched words")
+
+            assert result["success"] is True
+            patched = (tmp_path / "my-skill" / "SKILL.md").read_text()
+        assert "patched words" in patched
+
+    def test_patch_empty_file_path_rejected_instead_of_defaulting_to_skill_md(self, tmp_path):
+        """file_path='' is a caller mistake, not "no file_path": it must fail closed (#XXXX).
+
+        The falsy ``if file_path:`` guard let '' fall through to the SKILL.md branch, so a
+        reviewed supporting-file patch silently committed to SKILL.md instead."""
+        content = """\
+---
+name: test-skill
+description: A test skill.
+---
+
+# Test
+
+ANCHOR = 1.
+"""
+        reference = "ANCHOR = 1.\n"
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", content)
+            ref = tmp_path / "my-skill" / "references" / "one.md"
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_text(reference)
+            skill_md = tmp_path / "my-skill" / "SKILL.md"
+            before = skill_md.read_text()
+
+            result = _patch_skill("my-skill", "ANCHOR = 1.", "ANCHOR = 2.", file_path="")
+
+            assert result["success"] is False
+            assert "file_path" in result["error"].lower()
+            # Neither the primary file nor the intended supporting file may change.
+            assert skill_md.read_text() == before
+            assert ref.read_text() == reference
+
+    def test_patch_whitespace_only_file_path_still_rejected(self, tmp_path):
+        """A blank file_path never names a target: it must not reach SKILL.md either."""
+        content = """\
+---
+name: test-skill
+description: A test skill.
+---
+
+# Test
+
+word word
+"""
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", content)
+            skill_md = tmp_path / "my-skill" / "SKILL.md"
+            before = skill_md.read_text()
+
+            result = _patch_skill("my-skill", "word word", "patched words", file_path="   ")
+
+            assert result["success"] is False
+            assert skill_md.read_text() == before
+
+    def test_patch_valid_supporting_file_path_writes_reference_file(self, tmp_path):
+        """A real supporting-file path still lands in the reference file, not SKILL.md."""
+        content = """\
+---
+name: test-skill
+description: A test skill.
+---
+
+# Test
+
+ANCHOR = 1.
+"""
+        with _skill_dir(tmp_path):
+            _create_skill("my-skill", content)
+            ref = tmp_path / "my-skill" / "references" / "one.md"
+            ref.parent.mkdir(parents=True, exist_ok=True)
+            ref.write_text("ANCHOR = 1.\n")
+            skill_md = tmp_path / "my-skill" / "SKILL.md"
+            skill_before = skill_md.read_text()
+
+            result = _patch_skill("my-skill", "ANCHOR = 1.", "ANCHOR = 2.",
+                                  file_path="references/one.md")
+
+            assert result["success"] is True
+            assert ref.read_text() == "ANCHOR = 2.\n"
+            assert skill_md.read_text() == skill_before
+
 
 
 
